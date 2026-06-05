@@ -20,6 +20,7 @@
     "start:api": "tsx api/boot.ts"
   },
   "dependencies": {
+    "openai": "^4.104.0",
     "@anthropic-ai/sdk": "^0.100.1",
     "@hono/node-server": "^1.14.3",
     "@hookform/resolvers": "^5.2.2",
