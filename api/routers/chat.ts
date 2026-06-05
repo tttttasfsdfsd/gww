@@ -26,8 +26,7 @@ export const chatRouter = createRouter({
     .mutation(async ({ input }) => {
       const { message, financials, companyName, history, language } = input;
 
-      // If no API key, return a contextual fallback response
-      if (!env.anthropicApiKey || env.anthropicApiKey === "sk-ant-api03-placeholder") {
+      if (!env.openaiApiKey) {
         return {
           success: true,
           reply: generateFallbackResponse(message, financials, language),
@@ -35,8 +34,8 @@ export const chatRouter = createRouter({
       }
 
       try {
-        const Anthropic = await import("@anthropic-ai/sdk");
-        const client = new Anthropic.default({ apiKey: env.anthropicApiKey });
+        const OpenAI = await import("openai");
+        const client = new OpenAI.default({ apiKey: env.openaiApiKey });
 
         const isArabic = language === "ar";
 
@@ -54,23 +53,22 @@ You use numbers and ratios in your answers.
 Financial data for ${companyName || "the company"}:
 ${formatFinancialsForPrompt(financials, isArabic)}`;
 
-        const messages: ChatMessage[] = (history || []).slice(-6).map((h) => ({
-          role: h.role,
-          content: h.content,
-        }));
-        messages.push({ role: "user", content: message });
-
-        const response = await client.messages.create({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 800,
-          system: systemPrompt,
-          messages: messages.map((m) => ({
-            role: m.role as "user" | "assistant",
-            content: m.content,
+        const messages: { role: "user" | "assistant" | "system"; content: string }[] = [
+          { role: "system", content: systemPrompt },
+          ...(history || []).slice(-6).map((h) => ({
+            role: h.role as "user" | "assistant",
+            content: h.content,
           })),
+          { role: "user", content: message },
+        ];
+
+        const response = await client.chat.completions.create({
+          model: "gpt-4o-mini",
+          max_tokens: 800,
+          messages,
         });
 
-        const reply = response.content[0]?.type === "text" ? response.content[0].text : "Sorry, I couldn't process your question.";
+        const reply = response.choices[0]?.message?.content ?? "Sorry, I couldn't process your question.";
 
         return { success: true, reply };
       } catch (error) {
@@ -119,8 +117,6 @@ function generateFallbackResponse(
 ): string {
   const f = financials as Record<string, number> || {};
   const isArabic = language === "ar";
-
-  // Simple keyword-based contextual responses
   const lowerMsg = message.toLowerCase();
 
   if (lowerMsg.includes("roe") || lowerMsg.includes("العائد")) {
@@ -188,7 +184,6 @@ ${runway > 12 ? "Safe position. You have good liquidity." : runway > 6 ? "Cautio
 I recommend reviewing your cash flow plan monthly.`;
   }
 
-  // Default response
   if (isArabic) {
     return `شكراً على سؤالك. بناءً على البيانات المالية:
 
